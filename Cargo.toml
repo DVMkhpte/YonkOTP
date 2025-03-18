@@ -4,5 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-gtk = { version = "0.9.6", package = "gtk4", features = ["v4_12"] }
-glib = "0.20.9"
+oath = "0.10.2"
+rusqlite = "0.28"
+
+[patch.crates-io]
+digest = { git = "https://github.com/RustCrypto/hashes.git", tag = "v0.10.3" }
