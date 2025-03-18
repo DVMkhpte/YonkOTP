@@ -6,6 +6,23 @@
         <property name="default-height">800</property>
         <property name="title">YonkOTP</property>
         <property name="resizable">false</property>
+
+        <!-- Barre de titre avec menu -->
+        <property name="decorated">true</property>
+        <property name="titlebar">
+            <object class="GtkHeaderBar" id="header_bar">
+               
+                <!-- Bouton de menu -->
+                <child>
+                    <object class="GtkMenuButton" id="menu_button">
+                        <property name="icon-name">open-menu-symbolic</property>
+                        <property name="halign">end</property>
+                        <property name="popover">popover_menu</property>
+                    </object>
+                </child>
+            </object>
+        </property>
+
         <child>
             <object class="GtkBox" id="main_box">
                 <property name="orientation">vertical</property>
@@ -134,6 +151,31 @@
                                 <property name="css-classes">green-button</property>
                             </object>
                         </child>
+                    </object>
+                </child>
+            </object>
+        </child>
+    </object>
+
+    <!-- Menu déroulant -->
+    <object class="GtkPopover" id="popover_menu">
+        <child>
+            <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">5</property>
+                <child>
+                    <object class="GtkButton" id="export_button">
+                        <property name="label"> Export data CSV</property>
+                    </object>
+                </child>
+                <child>
+                    <object class="GtkButton" id="about_button">
+                        <property name="label">ℹ About</property>
+                    </object>
+                </child>
+                <child>
+                    <object class="GtkButton" id="help_button">
+                        <property name="label"> Help ...</property>
                     </object>
                 </child>
             </object>

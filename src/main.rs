@@ -3,6 +3,8 @@ use gtk::{glib, Application, Builder, CssProvider, Window};
 use gtk::gdk::Display;
 use std::rc::Rc;
 use std::cell::RefCell;
+use gtk::gio;
+use gtk::gio::AppInfo;
 
 mod data_filter; // Déclare le module
 use data_filter::{serach_data, validate_data}; // Importe la fonction filter_data
@@ -36,6 +38,38 @@ fn build_ui(app: &gtk::Application) {
 
     load_css();
     
+    if let Some(help_button) = builder.object::<gtk::Button>("help_button") {
+        help_button.connect_clicked(move |_| {
+            let url = "https://github.com/DVMkhpte/YonkOTP/issues"; // Remplace par ton lien
+            if let Err(err) = AppInfo::launch_default_for_uri(url, None::<&gio::AppLaunchContext>) {
+                eprintln!("Failed to open URL: {}", err);
+            }
+        });
+    }
+    
+    if let Some(export_button) = builder.object::<gtk::Button>("export_button") {
+        export_button.connect_clicked(move |_| {
+            println!("Opening Export...");
+            // TODO: Afficher une fenêtre de paramètres
+        });
+    }
+    
+    if let Some(about_button) = builder.object::<gtk::Button>("about_button") {
+        about_button.connect_clicked(move |_| {
+    
+            let about_dialog = gtk::AboutDialog::new();
+            about_dialog.set_program_name(Some("YonkOTP"));
+            about_dialog.set_version(Some("1.0.0"));
+            about_dialog.set_comments(Some("A simple OTP manager."));
+            about_dialog.set_website(Some("https://github.com/DVMkhpte/YonkOTP"));
+            about_dialog.set_website_label("GitHub Repository");
+            about_dialog.set_authors(&["Enzo Partel et Ryane Guehria"]);
+    
+            // Afficher la boîte de dialogue
+            about_dialog.set_visible(true);
+        });
+    }
+
     // Récupérer la fenêtre modale
     let add_key_window: Window = builder
         .object("add_key_window")
@@ -47,12 +81,6 @@ fn build_ui(app: &gtk::Application) {
     // Empêcher le redimensionnement et rendre la fenêtre modale
     add_key_window.set_transient_for(Some(&window)); // Associe la modale à la fenêtre principale
     add_key_window.set_modal(true);
-
-    // Intercepter la fermeture pour éviter la destruction
-    add_key_window.connect_close_request(|window| {
-        window.set_visible(false);
-        glib::Propagation::Stop
-    });
 
     // Utilisation de Rc<RefCell<>> pour éviter les problèmes de propriété
     let add_key_window_rc = Rc::new(RefCell::new(add_key_window));
@@ -230,6 +258,13 @@ fn load_css() {
             color: red;
             font-size: 14px;
             font-weight: bold;
+        }
+        .menu-button {
+            background: transparent;
+            padding: 1px;
+        }
+        .menu-button:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
     ");
 
