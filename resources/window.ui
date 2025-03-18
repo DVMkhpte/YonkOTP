@@ -131,7 +131,7 @@
     <object class="GtkWindow" id="add_key_window">
         <property name="title">Add New Key</property>
         <property name="default-width">400</property>
-        <property name="default-height">325</property>
+        <property name="default-height">350</property>
         <property name="modal">true</property> <!-- Empêche l'interaction avec la fenêtre principale -->
         <property name="resizable">false</property>
 
@@ -171,6 +171,14 @@
                 </child>
                 <child>
                     <object class="GtkEntry" id="secret_key_entry"/>
+                </child>
+
+                <child>
+                    <object class="GtkLabel" id="error_label">
+                        <property name="label"> </property> <!-- Vide par défaut -->
+                        <property name="halign">center</property>
+                        <property name="css-classes">error-text</property>
+                    </object>
                 </child>
 
                 <!-- Boutons -->

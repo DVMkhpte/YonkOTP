@@ -4,6 +4,10 @@ use gtk::gdk::Display;
 use std::rc::Rc;
 use std::cell::RefCell;
 
+mod data_filter; // Déclare le module
+use data_filter::{serach_data, validate_data}; // Importe la fonction filter_data
+
+
 const APP_ID: &str = "org.yonkotp.main";
 const UI_FILE: &str = "resources/window.ui"; 
 
@@ -67,6 +71,7 @@ fn build_ui(app: &gtk::Application) {
     // Récupérer le bouton "Add" et afficher la modale quand on clique dessus
     if let Some(button) = builder.object::<gtk::Button>("add_button") {
         let add_key_window_clone = add_key_window_rc.clone();
+        
         let service_entry_clone = service_entry.clone();
         let username_mail_entry_clone = username_mail_entry.clone();
         let secret_entry_clone = secret_entry.clone();
@@ -92,20 +97,35 @@ fn build_ui(app: &gtk::Application) {
     // Bouton "Save" pour récupérer les inputs et fermer la modale
     if let Some(save_button) = builder.object::<gtk::Button>("save_button") {
         let add_key_window_clone = add_key_window_rc.clone();
+        
         let service_entry_clone = service_entry.clone();
         let username_mail_entry_clone = username_mail_entry.clone();
         let secret_entry_clone = secret_entry.clone();
+
+        let error_label = builder
+        .object::<gtk::Label>("error_label")
+        .expect("Échec de récupération du label d'erreur");
 
         save_button.connect_clicked(move |_| {
             let service_name = service_entry_clone.text();
             let username_mail = username_mail_entry_clone.text();
             let secret_key = secret_entry_clone.text();
 
-            println!("Service: {}, Username/Mail: {}, Key: {}", service_name, username_mail, secret_key); // Debug output
-
-            // TODO: Envoyer vers la BDD
-
-            add_key_window_clone.borrow().set_visible(false);
+            match validate_data(&service_name, &username_mail, &secret_key) {
+                Ok(_) => {
+                    println!("Données valides : Service: {}, Username/Mail: {}, Key: {}", 
+                             service_name, username_mail, secret_key);
+    
+                    // TODO: Envoyer vers la BDD
+    
+                    add_key_window_clone.borrow().set_visible(false);
+                }
+                Err(err) => {
+                    println!("Erreur de validation : {}", err);
+                    error_label.set_text(&err);
+                    // TODO: Afficher une alerte GTK (message d'erreur)
+                }
+            }
         });
     }
 
@@ -158,6 +178,11 @@ fn load_css() {
         GtkSeparator {
             background-color: #555;
             min-height: 1px;
+        }
+        .error-text {
+            color: red;
+            font-size: 14px;
+            font-weight: bold;
         }
     ");
 
