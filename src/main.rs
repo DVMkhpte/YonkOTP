@@ -106,15 +106,22 @@ fn build_ui(app: &gtk::Application) {
         .object::<gtk::Label>("error_label")
         .expect("Échec de récupération du label d'erreur");
 
+        let listbox = builder
+        .object::<gtk::ListBox>("otp_list")
+        .expect("Échec du chargement de la liste OTP");
+
         save_button.connect_clicked(move |_| {
             let service_name = service_entry_clone.text();
             let username_mail = username_mail_entry_clone.text();
-            let secret_key = secret_entry_clone.text();
+            let secret_key = "JBSWY3DPEHPK3PXP";//secret_entry_clone.text();
 
             match validate_data(&service_name, &username_mail, &secret_key) {
                 Ok(_) => {
                     println!("Données valides : Service: {}, Username/Mail: {}, Key: {}", 
                              service_name, username_mail, secret_key);
+
+                    // Ajouter à la liste OTP
+                    add_otp_entry(&listbox, &service_name, &username_mail, &secret_key);
     
                     // TODO: Envoyer vers la BDD
     
@@ -132,6 +139,46 @@ fn build_ui(app: &gtk::Application) {
     window.present();
 }
 
+fn add_otp_entry(listbox: &gtk::ListBox, service: &str, username: &str, secret: &str) {
+    let row = gtk::ListBoxRow::new();
+    let container = gtk::Box::new(gtk::Orientation::Vertical, 5);
+
+    // Première ligne : Service + Timer
+    let first_row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    let service_label = gtk::Label::new(Some(&format!("{}: {}", service, username)));
+    service_label.set_halign(gtk::Align::Start);
+    service_label.add_css_class("otp-name");
+
+    let timer_label = gtk::Label::new(Some("30")); // Timer (à remplacer plus tard par un vrai countdown)
+    timer_label.set_halign(gtk::Align::End);
+    timer_label.add_css_class("otp-timer");
+
+    let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    spacer.set_hexpand(true);
+
+    first_row.append(&service_label);
+    first_row.append(&spacer);
+    first_row.append(&timer_label);
+
+    // Deuxième ligne : Code OTP
+    let otp_label = gtk::Label::new(Some("123 789"));
+    otp_label.set_halign(gtk::Align::Start);
+    otp_label.add_css_class("otp-code");
+
+    // Ajouter les éléments au container principal
+    container.append(&first_row);
+    container.append(&otp_label);
+    
+    // Ajouter la structure complète à la ligne
+    row.set_child(Some(&container));
+
+    // Ajouter à la liste
+    listbox.append(&row);
+
+    // Ajouter un séparateur
+    let separator = gtk::Separator::new(gtk::Orientation::Horizontal);
+    listbox.append(&separator);
+}
 
 fn load_css() {
     let provider = CssProvider::new();
