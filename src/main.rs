@@ -22,7 +22,7 @@ fn build_ui(app: &gtk::Application) {
     // Charger l'interface à partir du fichier XML
     let builder = Builder::from_file(UI_FILE);
 
-    // Récupérer la fenêtre définie dans le fichier XML
+    // Récupérer la fenêtre principale
     let window: gtk::ApplicationWindow = builder
         .object("main_window")
         .expect("Échec du chargement de la fenêtre");
@@ -32,37 +32,28 @@ fn build_ui(app: &gtk::Application) {
 
     load_css();
     
-     // Récupérer la fenêtre modale
+    // Récupérer la fenêtre modale
     let add_key_window: Window = builder
-    .object("add_key_window")
-    .expect("Échec du chargement de la modale");
+        .object("add_key_window")
+        .expect("Échec du chargement de la modale");
 
-// Empêcher le redimensionnement et rendre la fenêtre modale
-add_key_window.set_transient_for(Some(&window)); // Associe la modale à la fenêtre principale
-add_key_window.set_modal(true);
+    // Désactiver la minimisation et maximisation en enlevant la barre de titre
+    add_key_window.set_decorated(false);
 
-// Utilisation de Rc<RefCell<>> pour éviter les problèmes de propriété
-let add_key_window_rc = Rc::new(RefCell::new(add_key_window));
+    // Empêcher le redimensionnement et rendre la fenêtre modale
+    add_key_window.set_transient_for(Some(&window)); // Associe la modale à la fenêtre principale
+    add_key_window.set_modal(true);
 
-// Récupérer le bouton "Add" et afficher la modale quand on clique dessus
-if let Some(button) = builder.object::<gtk::Button>("add_button") {
-    let add_key_window_clone = add_key_window_rc.clone();
-    button.connect_clicked(move |_| {
-        add_key_window_clone.borrow().set_visible(true);
+    // Intercepter la fermeture pour éviter la destruction
+    add_key_window.connect_close_request(|window| {
+        window.set_visible(false);
+        glib::Propagation::Stop
     });
-}
 
-// Bouton "Cancel" pour fermer la modale
-if let Some(cancel_button) = builder.object::<gtk::Button>("cancel_button") {
-    let add_key_window_clone = add_key_window_rc.clone();
-    cancel_button.connect_clicked(move |_| {
-        add_key_window_clone.borrow().set_visible(false);
-    });
-}
+    // Utilisation de Rc<RefCell<>> pour éviter les problèmes de propriété
+    let add_key_window_rc = Rc::new(RefCell::new(add_key_window));
 
-// Bouton "Save" pour récupérer les inputs et fermer la modale
-if let Some(save_button) = builder.object::<gtk::Button>("save_button") {
-    let add_key_window_clone = add_key_window_rc.clone();
+    // Récupérer les champs de texte
     let service_entry = builder
         .object::<gtk::Entry>("service_name_entry")
         .expect("Champ service introuvable");
@@ -73,18 +64,50 @@ if let Some(save_button) = builder.object::<gtk::Button>("save_button") {
         .object::<gtk::Entry>("secret_key_entry")
         .expect("Champ secret introuvable");
 
-    save_button.connect_clicked(move |_| {
-        let service_name = service_entry.text();
-        let secret_key = secret_entry.text();
-        let username_mail = username_mail_entry.text();
+    // Récupérer le bouton "Add" et afficher la modale quand on clique dessus
+    if let Some(button) = builder.object::<gtk::Button>("add_button") {
+        let add_key_window_clone = add_key_window_rc.clone();
+        let service_entry_clone = service_entry.clone();
+        let username_mail_entry_clone = username_mail_entry.clone();
+        let secret_entry_clone = secret_entry.clone();
 
-        println!("Service: {}, Username/Mail: {}, Key: {}", service_name, username_mail, secret_key); // Debug output
+        button.connect_clicked(move |_| {
+            // Réinitialiser les champs avant d'afficher la fenêtre
+            service_entry_clone.set_text("");
+            username_mail_entry_clone.set_text("");
+            secret_entry_clone.set_text("");
 
-        // TODO: Envoyer vers la bdd
+            add_key_window_clone.borrow().set_visible(true);
+        });
+    }
 
-        add_key_window_clone.borrow().set_visible(false);
-    });
-}
+    // Bouton "Cancel" pour fermer la modale
+    if let Some(cancel_button) = builder.object::<gtk::Button>("cancel_button") {
+        let add_key_window_clone = add_key_window_rc.clone();
+        cancel_button.connect_clicked(move |_| {
+            add_key_window_clone.borrow().set_visible(false);
+        });
+    }
+
+    // Bouton "Save" pour récupérer les inputs et fermer la modale
+    if let Some(save_button) = builder.object::<gtk::Button>("save_button") {
+        let add_key_window_clone = add_key_window_rc.clone();
+        let service_entry_clone = service_entry.clone();
+        let username_mail_entry_clone = username_mail_entry.clone();
+        let secret_entry_clone = secret_entry.clone();
+
+        save_button.connect_clicked(move |_| {
+            let service_name = service_entry_clone.text();
+            let username_mail = username_mail_entry_clone.text();
+            let secret_key = secret_entry_clone.text();
+
+            println!("Service: {}, Username/Mail: {}, Key: {}", service_name, username_mail, secret_key); // Debug output
+
+            // TODO: Envoyer vers la BDD
+
+            add_key_window_clone.borrow().set_visible(false);
+        });
+    }
 
     window.present();
 }
