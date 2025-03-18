@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+    <object class="GtkApplicationWindow" id="main_window">
+        <property name="default-width">600</property>
+        <property name="default-height">800</property>
+        <property name="title">YonkOTP</property>
+        <child>
+            <object class="GtkBox" id="main_box">
+                <property name="orientation">vertical</property>
+                <property name="spacing">20</property>
+                <property name="margin-top">50</property>
+                <child>
+                    <object class="GtkButton" id="ok_button">
+                        <property name="halign">center</property>
+                        <property name="margin-top">20</property>
+                        <property name="width-request">200</property>
+                        <property name="height-request">50</property>
+                        <style>
+                            <class name="green-button"/>  <!-- Nom de classe CSS -->
+                        </style>
+                        <child>
+                            <object class="GtkBox">
+                                <property name="orientation">horizontal</property>
+                                <property name="spacing">10</property>
+                                <child>
+                                    <object class="GtkImage">
+                                        <property name="icon-name">list-add</property>  <!-- Icône de croix ➕ -->
+                                    </object>
+                                </child>
+                                <child>
+                                    <object class="GtkLabel">
+                                        <property name="label">Add Key</property>
+                                    </object>
+                                </child>
+                            </object>
+                        </child>
+                    </object>
+                </child>
+            </object>
+        </child>
+    </object>
+</interface>
