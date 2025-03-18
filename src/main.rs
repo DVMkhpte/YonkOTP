@@ -26,6 +26,7 @@ fn build_ui(app: &gtk::Application) {
         .expect("Échec du chargement de la fenêtre");
 
     window.set_application(Some(app));
+    window.set_resizable(false);
 
     load_css();
     
@@ -43,16 +44,28 @@ fn load_css() {
     let provider = CssProvider::new();
     provider
         .load_from_string("
-        .green-button {
-            background: #347D39; 
-            color: white;
-            font-size: 16px;
+        .title-label {
+            font-size: 24px;
             font-weight: bold;
-            padding: 10px 20px;
+        }
+        .search-entry {
+            background: #444;
+            color: white;
+            border-radius: 8px;
+            padding: 5px;
+        }
+        .green-button {
+            background: #28a745;
+            color: white;
+            font-weight: bold;
             border-radius: 8px;
         }
         .green-button:hover {
-            background: #3b8640; /* Vert plus foncé au survol */
+            background: #218838;
+        }
+        .otp-code {
+            font-size: 22px;
+            font-weight: bold;
         }
     ");
 
