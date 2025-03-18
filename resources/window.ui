@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
+    <!-- Fenêtre principale -->
     <object class="GtkApplicationWindow" id="main_window">
         <property name="default-width">600</property>
         <property name="default-height">800</property>
         <property name="title">YonkOTP</property>
+        <property name="resizable">false</property>
         <child>
             <object class="GtkBox" id="main_box">
                 <property name="orientation">vertical</property>
-                <property name="spacing">10</property>
+                <property name="spacing">15</property>
+                <property name="margin-start">15</property>
+                <property name="margin-end">15</property>
                 <property name="margin-top">10</property>
-                <property name="margin-start">10</property>
-                <property name="margin-end">10</property>
                 <property name="margin-bottom">10</property>
 
                 <!-- Titre -->
@@ -46,45 +48,150 @@
 
                 <!-- Liste des OTP -->
                 <child>
-                    <object class="GtkListBox" id="otp_list">
-                        <property name="margin-top">10</property>
+                    <object class="GtkScrolledWindow">
+                        <property name="hexpand">true</property>
+                        <property name="vexpand">true</property>
                         <child>
-                            <object class="GtkListBoxRow">
+                            <object class="GtkListBox" id="otp_list">
+                                <property name="margin-top">10</property>
+
+                                <!-- OTP Item -->
                                 <child>
-                                    <object class="GtkBox">
-                                        <property name="orientation">horizontal</property>
-                                        <property name="spacing">10</property>
-                                        <property name="margin-top">10</property>
-                                        <property name="margin-bottom">10</property>
-                                        <property name="margin-start">10</property>
-                                        <property name="margin-end">10</property>
+                                    <object class="GtkListBoxRow">
                                         <child>
-                                            <object class="GtkLabel">
-                                                <property name="label">Google : Username</property>
-                                                <property name="xalign">0</property>
-                                            </object>
-                                        </child>
-                                        <child>
-                                            <object class="GtkLabel">
-                                                <property name="label">123 456</property>
-                                                <property name="xalign">0.5</property>
-                                                <property name="css-classes">otp-code</property>
-                                            </object>
-                                        </child>
-                                        <child>
-                                            <object class="GtkLabel">
-                                                <property name="label">30</property>
-                                                <property name="xalign">1</property>
+                                            <object class="GtkBox">
+                                                <property name="orientation">vertical</property>
+                                                <property name="spacing">5</property>
+                                                <property name="margin-top">10</property>
+                                                <property name="margin-bottom">10</property>
+                                                <property name="margin-start">10</property>
+                                                <property name="margin-end">10</property>
+
+                                                <!-- Première ligne : Nom du service + Timer -->
+                                                <child>
+                                                    <object class="GtkBox">
+                                                        <property name="orientation">horizontal</property>
+                                                        <property name="spacing">10</property>
+
+                                                        <!-- Service -->
+                                                        <child>
+                                                            <object class="GtkLabel">
+                                                                <property name="label">Google : Username</property>
+                                                                <property name="halign">start</property>
+                                                                <property name="css-classes">otp-name</property>
+                                                            </object>
+                                                        </child>
+
+                                                        <!-- Espaceur pour pousser le timer à droite -->
+                                                        <child>
+                                                            <object class="GtkBox">
+                                                                <property name="hexpand">true</property>
+                                                            </object>
+                                                        </child>
+
+                                                        <!-- Timer à droite -->
+                                                        <child>
+                                                            <object class="GtkLabel">
+                                                                <property name="label">30</property>
+                                                                <property name="halign">end</property>
+                                                                <property name="css-classes">otp-timer</property>
+                                                            </object>
+                                                        </child>
+                                                    </object>
+                                                </child>
+                                                <!-- Deuxième ligne : Code OTP -->
+                                                <child>
+                                                    <object class="GtkLabel">
+                                                        <property name="label">123 456</property>
+                                                        <property name="halign">start</property>
+                                                        <property name="css-classes">otp-code</property>
+                                                    </object>
+                                                </child>
+
                                             </object>
                                         </child>
                                     </object>
                                 </child>
+
+                                <!-- Séparateur -->
+                                <child>
+                                    <object class="GtkSeparator"/>
+                                </child>
+
                             </object>
                         </child>
-                        <!-- Dupliquer cette section pour plusieurs OTP -->
                     </object>
                 </child>
 
+            </object>
+        </child>
+    </object>
+
+    <!-- Fenêtre modale (CORRECTION) -->
+    <object class="GtkWindow" id="add_key_window">
+        <property name="title">Add New Key</property>
+        <property name="default-width">400</property>
+        <property name="default-height">325</property>
+        <property name="modal">true</property> <!-- Empêche l'interaction avec la fenêtre principale -->
+        <property name="resizable">false</property>
+
+        <child>
+            <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">15</property>
+                <property name="margin-start">20</property>
+                <property name="margin-end">20</property>
+                <property name="margin-top">20</property>
+
+                <child>
+                    <object class="GtkLabel">
+                        <property name="label">Service Name:</property>
+                        <property name="halign">start</property>
+                    </object>
+                </child>
+                <child>
+                    <object class="GtkEntry" id="service_name_entry"/>
+                </child>
+
+                <child>
+                    <object class="GtkLabel">
+                        <property name="label">Username or mail:</property>
+                        <property name="halign">start</property>
+                    </object>
+                </child>
+                <child>
+                    <object class="GtkEntry" id="username_mail_entry"/>
+                </child>
+
+                <child>
+                    <object class="GtkLabel">
+                        <property name="label">Secret Key:</property>
+                        <property name="halign">start</property>
+                    </object>
+                </child>
+                <child>
+                    <object class="GtkEntry" id="secret_key_entry"/>
+                </child>
+
+                <!-- Boutons -->
+                <child>
+                    <object class="GtkBox">
+                        <property name="orientation">horizontal</property>
+                        <property name="spacing">10</property>
+                        <property name="halign">end</property>
+                        <child>
+                            <object class="GtkButton" id="cancel_button">
+                                <property name="label">Cancel</property>
+                            </object>
+                        </child>
+                        <child>
+                            <object class="GtkButton" id="save_button">
+                                <property name="label">Save</property>
+                                <property name="css-classes">green-button</property>
+                            </object>
+                        </child>
+                    </object>
+                </child>
             </object>
         </child>
     </object>
