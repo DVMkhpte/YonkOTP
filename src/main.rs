@@ -5,6 +5,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use gtk::gio;
 use gtk::gio::AppInfo;
+mod database;
 
 mod data_filter; // Déclare le module
 use data_filter::{serach_data, validate_data}; // Importe la fonction filter_data
@@ -12,21 +13,29 @@ use data_filter::{serach_data, validate_data}; // Importe la fonction filter_dat
 
 const APP_ID: &str = "org.yonkotp.main";
 const UI_FILE: &str = "resources/window.ui"; 
+use rusqlite::{Connection, Result};
+use database::{init_db, insert_otp_object, select_data, select_data_cond};
 
-fn main() -> glib::ExitCode {
-    // Create a new application
-    let app = Application::builder().application_id(APP_ID).build();
+fn main() -> Result<()> {
+    // Connexion à la base SQLite
+    let conn = Connection::open("yonkotp_data.db")?;
+    // Initialisation de la table
+    init_db(&conn)?;
 
-    // Connect to "activate" signal of `app`
-    app.connect_activate(build_ui);
+    // Clé de chiffrement (32 octets pour AES-256)
+    let key = b"01234567890123456789012345678901";
 
-    // Run the application
-    app.run()
-}
+    // Insertion d'exemples
+    insert_otp_object(&conn, "Google", "user_email", "SecretGoogle", key)?;
+    insert_otp_object(&conn, "GitHub", "user_username", "SecretGitHub", key)?;
+    insert_otp_object(&conn, "Facebook", "user_email", "SecretFacebook", key)?;
 
-fn build_ui(app: &gtk::Application) {
-    // Charger l'interface à partir du fichier XML
-    let builder = Builder::from_file(UI_FILE);
+    // Sélection de tous les enregistrements
+    let all_data = select_data(&conn, key)?;
+    println!("Tous les enregistrements (id, service, u_m) :");
+    for (id, service, u_m) in all_data {
+        println!("ID: {}, Service: {}, u_m: {}", id, service, u_m);
+    }
 
     // Récupérer la fenêtre principale
     let window: gtk::ApplicationWindow = builder
