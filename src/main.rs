@@ -5,7 +5,7 @@ use database::{init_db, insert_otp_object, select_data, select_data_cond};
 
 fn main() -> Result<()> {
     // Connexion à la base SQLite
-    let conn = Connection::open("otp_data.db")?;
+    let conn = Connection::open("yonkotp_data.db")?;
     // Initialisation de la table
     init_db(&conn)?;
 
