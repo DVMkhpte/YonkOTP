@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-oath = "0.10.2"
-rusqlite = "0.28"
+totp-rs = "5.1.1"
+rusqlite = "0.34.0"
 
-[patch.crates-io]
-digest = { git = "https://github.com/RustCrypto/hashes.git", tag = "v0.10.3" }
+
+
+
+
