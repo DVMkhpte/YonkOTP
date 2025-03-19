@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 gtk = { version = "0.9.6", package = "gtk4", features = ["v4_12"] }
 glib = "0.20.9"
+totp-rs = "5.1.1"
