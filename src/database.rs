@@ -16,7 +16,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Chiffre une chaîne en AES-256-GCM et encode le résultat en Base64.
+/// Chiffre une chaîne avec AES-256-GCM et encode en Base64.
 fn encrypt_and_base64(key: &[u8], plaintext: &str) -> String {
     // Attention : nonce fixe pour la démo uniquement !
     let nonce = Nonce::from_slice(b"unique nonce"); // 12 octets
@@ -25,7 +25,7 @@ fn encrypt_and_base64(key: &[u8], plaintext: &str) -> String {
     general_purpose::STANDARD.encode(ciphertext)
 }
 
-/// Décode en Base64 et déchiffre une chaîne en AES-256-GCM.
+/// Décode en Base64 et déchiffre avec AES-256-GCM.
 fn decrypt_from_base64(key: &[u8], b64_ciphertext: &str) -> String {
     let nonce = Nonce::from_slice(b"unique nonce");
     let cipher = Aes256Gcm::new_from_slice(key).unwrap();
@@ -36,7 +36,7 @@ fn decrypt_from_base64(key: &[u8], b64_ciphertext: &str) -> String {
     String::from_utf8(decrypted_data).unwrap()
 }
 
-/// Insère un enregistrement dans la table `otp_object` en chiffrant les champs.
+/// Insère un enregistrement dans la table `otp_object`.
 pub fn insert_otp_object(
     conn: &Connection,
     service: &str,
@@ -54,25 +54,50 @@ pub fn insert_otp_object(
     )
 }
 
-/// Récupère l'OTP secret et le service, déchiffrés, et renvoie un vecteur de tuples (secret_key, service).
-pub fn select_keys(
+/// Récupère tous les enregistrements et renvoie un vecteur de tuples (id, service, u_m).
+pub fn select_data(
     conn: &Connection,
     encryption_key: &[u8],
-) -> Result<Vec<(String, String)>> {
-    let mut stmt = conn.prepare("SELECT secret_key, service FROM otp_object")?;
+) -> Result<Vec<(i64, String, String)>> {
+    let mut stmt = conn.prepare("SELECT id, service, u_m FROM otp_object")?;
     let rows = stmt.query_map([], |row| {
-        let enc_secret_key: String = row.get(0)?;
+        let id: i64 = row.get(0)?;
         let enc_service: String = row.get(1)?;
-
-        let secret_key = decrypt_from_base64(encryption_key, &enc_secret_key);
+        let enc_u_m: String = row.get(2)?;
         let service = decrypt_from_base64(encryption_key, &enc_service);
-
-        Ok((secret_key, service))
+        let u_m = decrypt_from_base64(encryption_key, &enc_u_m);
+        Ok((id, service, u_m))
     })?;
 
     let mut results = Vec::new();
     for row in rows {
         results.push(row?);
+    }
+    Ok(results)
+}
+
+/// Récupère les enregistrements dont le champ déchiffré u_m correspond au filtre donné.
+pub fn select_data_cond(
+    conn: &Connection,
+    u_m_filter: &str,
+    encryption_key: &[u8],
+) -> Result<Vec<(i64, String, String)>> {
+    let mut stmt = conn.prepare("SELECT id, service, u_m FROM otp_object")?;
+    let rows = stmt.query_map([], |row| {
+        let id: i64 = row.get(0)?;
+        let enc_service: String = row.get(1)?;
+        let enc_u_m: String = row.get(2)?;
+        let service = decrypt_from_base64(encryption_key, &enc_service);
+        let u_m = decrypt_from_base64(encryption_key, &enc_u_m);
+        Ok((id, service, u_m))
+    })?;
+
+    let mut results = Vec::new();
+    for row in rows {
+        let (id, service, u_m) = row?;
+        if u_m == u_m_filter {
+            results.push((id, service, u_m));
+        }
     }
     Ok(results)
 }
