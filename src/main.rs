@@ -10,33 +10,36 @@ mod database;
 mod data_filter; // Déclare le module
 use data_filter::{serach_data, validate_data}; // Importe la fonction filter_data
 
-
-const APP_ID: &str = "org.yonkotp.main";
-const UI_FILE: &str = "resources/window.ui"; 
 use rusqlite::{Connection, Result};
 use database::{init_db, insert_otp_object, select_data, select_data_cond};
 
+const APP_ID: &str = "org.yonkotp.main";
+const UI_FILE: &str = "resources/window.ui";
+const DB_FILE: &str = "database/yonkotp_data.db";
+const AES_KEY: &[u8; 32] = b"01234567890123456789012345678901";
+
+
+
 fn main() -> Result<()> {
-    // Connexion à la base SQLite
-    let conn = Connection::open("yonkotp_data.db")?;
-    // Initialisation de la table
+    // Crée l'application GTK
+    let app = Application::builder().application_id(APP_ID).build();
+
+    // Connexion à la base SQLite et initialisation
+    let conn = Connection::open(DB_FILE)?;
     init_db(&conn)?;
 
-    // Clé de chiffrement (32 octets pour AES-256)
-    let key = b"01234567890123456789012345678901";
+    // Lancer l'interface GTK
+    app.connect_activate(build_ui);
+    app.run();
 
-    // Insertion d'exemples
-    insert_otp_object(&conn, "Google", "user_email", "SecretGoogle", key)?;
-    insert_otp_object(&conn, "GitHub", "user_username", "SecretGitHub", key)?;
-    insert_otp_object(&conn, "Facebook", "user_email", "SecretFacebook", key)?;
-
-    // Sélection de tous les enregistrements
-    let all_data = select_data(&conn, key)?;
-    println!("Tous les enregistrements (id, service, u_m) :");
-    for (id, service, u_m) in all_data {
-        println!("ID: {}, Service: {}, u_m: {}", id, service, u_m);
-    }
-
+    Ok(())
+}
+    
+fn build_ui(app: &gtk::Application) {
+    
+    // Charger l'interface à partir du fichier XML
+    let builder = Builder::from_file(UI_FILE);
+    
     // Récupérer la fenêtre principale
     let window: gtk::ApplicationWindow = builder
         .object("main_window")
@@ -150,13 +153,15 @@ fn main() -> Result<()> {
         save_button.connect_clicked(move |_| {
             let service_name = service_entry_clone.text();
             let username_mail = username_mail_entry_clone.text();
-            let secret_key = "JBSWY3DPEHPK3PXP";//secret_entry_clone.text();
+            let secret_key = secret_entry_clone.text();
 
             match validate_data(&service_name, &username_mail, &secret_key) {
                 Ok(_) => {
                     println!("Données valides : Service: {}, Username/Mail: {}, Key: {}", 
                              service_name, username_mail, secret_key);
 
+                    
+                    
                     // Ajouter à la liste OTP
                     add_otp_entry(&listbox, &service_name, &username_mail, &secret_key);
     
