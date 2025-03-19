@@ -5,12 +5,12 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use gtk::gio;
 use gtk::gio::AppInfo;
-mod database;
-
-mod data_filter; // Déclare le module
-use data_filter::{serach_data, validate_data}; // Importe la fonction filter_data
-
 use rusqlite::{Connection, Result};
+
+mod data_filter;
+use data_filter::{serach_data, validate_data};
+
+mod database;
 use database::{init_db, insert_otp_object, select_data, select_data_cond};
 
 const APP_ID: &str = "org.yonkotp.main";
@@ -20,22 +20,23 @@ const AES_KEY: &[u8; 32] = b"01234567890123456789012345678901";
 
 
 
+
 fn main() -> Result<()> {
     // Crée l'application GTK
     let app = Application::builder().application_id(APP_ID).build();
 
     // Connexion à la base SQLite et initialisation
-    let conn = Connection::open(DB_FILE)?;
+    let conn = Rc::new(Connection::open(DB_FILE)?);
     init_db(&conn)?;
 
-    // Lancer l'interface GTK
-    app.connect_activate(build_ui);
-    app.run();
+    // Lancer l'interface GTK en passant la connexion clonée
+    app.connect_activate(move |app| build_ui(app, conn.clone()));
 
+    app.run();
     Ok(())
 }
     
-fn build_ui(app: &gtk::Application) {
+fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
     
     // Charger l'interface à partir du fichier XML
     let builder = Builder::from_file(UI_FILE);
@@ -45,8 +46,14 @@ fn build_ui(app: &gtk::Application) {
         .object("main_window")
         .expect("Échec du chargement de la fenêtre");
 
+    let listbox = builder
+    .object::<gtk::ListBox>("otp_list")        
+    .expect("Échec du chargement de la liste OTP");
+
     window.set_application(Some(app));
     window.set_resizable(false);
+
+    populate_otp_list(&listbox, conn.clone());
 
     load_css();
     
@@ -146,10 +153,6 @@ fn build_ui(app: &gtk::Application) {
         .object::<gtk::Label>("error_label")
         .expect("Échec de récupération du label d'erreur");
 
-        let listbox = builder
-        .object::<gtk::ListBox>("otp_list")
-        .expect("Échec du chargement de la liste OTP");
-
         save_button.connect_clicked(move |_| {
             let service_name = service_entry_clone.text();
             let username_mail = username_mail_entry_clone.text();
@@ -160,12 +163,9 @@ fn build_ui(app: &gtk::Application) {
                     println!("Données valides : Service: {}, Username/Mail: {}, Key: {}", 
                              service_name, username_mail, secret_key);
 
-                    
-                    
+                    insert_otp_object(&conn, service_name.as_str(), username_mail.as_str(), secret_key.as_str(), AES_KEY);
                     // Ajouter à la liste OTP
-                    add_otp_entry(&listbox, &service_name, &username_mail, &secret_key);
-    
-                    // TODO: Envoyer vers la BDD
+                    populate_otp_list(&listbox, conn.clone());
     
                     add_key_window_clone.borrow().set_visible(false);
                 }
@@ -181,7 +181,26 @@ fn build_ui(app: &gtk::Application) {
     window.present();
 }
 
-fn add_otp_entry(listbox: &gtk::ListBox, service: &str, username: &str, secret: &str) {
+fn populate_otp_list(listbox: &gtk::ListBox, conn: Rc<Connection>) {
+    // Effacer tous les enfants de la liste
+    while let Some(child) = listbox.first_child() {
+        listbox.remove(&child);
+    }
+
+    // Récupérer les données depuis la BDD
+    match select_data(&conn, AES_KEY) {
+        Ok(data) => {
+            for (id, service, username) in data {
+                add_otp_entry(listbox, id, &service, &username);
+            }
+        }
+        Err(err) => {
+            eprintln!("Erreur lors de la récupération des données OTP : {}", err);
+        }
+    }
+}
+
+fn add_otp_entry(listbox: &gtk::ListBox, id: i64, service: &str, username: &str) {
     let row = gtk::ListBoxRow::new();
     let container = gtk::Box::new(gtk::Orientation::Vertical, 5);
 
