@@ -1,3 +1,5 @@
+use std::time::Duration;
+use std::thread;
 use gtk::prelude::*;
 use gtk::{glib, Application, Builder, CssProvider, Window};
 use gtk::gdk::Display;
@@ -7,6 +9,8 @@ use gtk::gio;
 use gtk::gio::AppInfo;
 use rusqlite::{Connection, Result};
 
+mod otp;
+use otp::start_otp_generator;
 mod data_filter;
 use data_filter::{serach_data, validate_data};
 
@@ -65,72 +69,10 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
             }
         });
     }
-    
-    if let Some(export_button) = builder.object::<gtk::Button>("export_button") {
-        export_button.connect_clicked(move |_| {
-            println!("Opening Export...");
-            // TODO: Afficher une fenêtre de paramètres
-        });
-    }
-    
-    if let Some(about_button) = builder.object::<gtk::Button>("about_button") {
-        about_button.connect_clicked(move |_| {
-    
-            let about_dialog = gtk::AboutDialog::new();
-            about_dialog.set_program_name(Some("YonkOTP"));
-            about_dialog.set_version(Some("1.0.0"));
-            about_dialog.set_comments(Some("A simple OTP manager."));
-            about_dialog.set_website(Some("https://github.com/DVMkhpte/YonkOTP"));
-            about_dialog.set_website_label("GitHub Repository");
-            about_dialog.set_authors(&["Enzo Partel et Ryane Guehria"]);
-    
-            // Afficher la boîte de dialogue
-            about_dialog.set_visible(true);
-        });
-    }
 
-    // Récupérer la fenêtre modale
-    let add_key_window: Window = builder
-        .object("add_key_window")
-        .expect("Échec du chargement de la modale");
-
-    // Désactiver la minimisation et maximisation en enlevant la barre de titre
-    add_key_window.set_decorated(false);
-
-    // Empêcher le redimensionnement et rendre la fenêtre modale
-    add_key_window.set_transient_for(Some(&window)); // Associe la modale à la fenêtre principale
-    add_key_window.set_modal(true);
-
-    // Utilisation de Rc<RefCell<>> pour éviter les problèmes de propriété
-    let add_key_window_rc = Rc::new(RefCell::new(add_key_window));
-
-    // Récupérer les champs de texte
-    let service_entry = builder
-        .object::<gtk::Entry>("service_name_entry")
-        .expect("Champ service introuvable");
-    let username_mail_entry = builder
-        .object::<gtk::Entry>("username_mail_entry")
-        .expect("Champ username/mail introuvable");
-    let secret_entry = builder
-        .object::<gtk::Entry>("secret_key_entry")
-        .expect("Champ secret introuvable");
-
-    // Récupérer le bouton "Add" et afficher la modale quand on clique dessus
-    if let Some(button) = builder.object::<gtk::Button>("add_button") {
-        let add_key_window_clone = add_key_window_rc.clone();
-        
-        let service_entry_clone = service_entry.clone();
-        let username_mail_entry_clone = username_mail_entry.clone();
-        let secret_entry_clone = secret_entry.clone();
-
-        button.connect_clicked(move |_| {
-            // Réinitialiser les champs avant d'afficher la fenêtre
-            service_entry_clone.set_text("");
-            username_mail_entry_clone.set_text("");
-            secret_entry_clone.set_text("");
-
-            add_key_window_clone.borrow().set_visible(true);
-        });
+    // Permet de garder le programme en exécution
+    loop {
+        thread::sleep(Duration::from_secs(10));
     }
 
     // Bouton "Cancel" pour fermer la modale
