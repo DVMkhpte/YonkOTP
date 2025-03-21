@@ -64,8 +64,10 @@ pub fn select_data(
         let id: i64 = row.get(0)?;
         let enc_service: String = row.get(1)?;
         let enc_u_m: String = row.get(2)?;
+        
         let service = decrypt_from_base64(encryption_key, &enc_service);
         let u_m = decrypt_from_base64(encryption_key, &enc_u_m);
+        
         Ok((id, service, u_m))
     })?;
 
@@ -76,6 +78,20 @@ pub fn select_data(
     Ok(results)
 }
 
+pub fn select_data_secret(
+    conn: &Connection,
+    encryption_key: &[u8],
+    id_to_search: i64,
+) -> Result<String> {
+    let mut stmt = conn.prepare("SELECT secret_key FROM otp_object WHERE id = ?1")?;
+    
+    let secret_key = stmt.query_row([id_to_search], |row| {
+        let enc_secret_key: String = row.get(0)?;
+        Ok(decrypt_from_base64(encryption_key, &enc_secret_key))
+    }).unwrap_or_else(|_| String::new()); 
+
+    Ok(secret_key)
+}
 /// Récupère les enregistrements dont le champ déchiffré u_m correspond au filtre donné.
 pub fn select_data_cond(
     conn: &Connection,

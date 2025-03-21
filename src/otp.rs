@@ -1,4 +1,5 @@
 use std::thread;
+use std::sync::mpsc::{self, Sender, Receiver};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use totp_rs::{Algorithm, TOTP};
 
@@ -9,14 +10,22 @@ fn generate_otp(secret: &str) -> String {
     totp.generate_current().unwrap_or_else(|_| "ERROR".to_string())
 }
 
-pub fn start_otp_generator(secret: &'static str, label: &'static str) {
+pub fn start_otp_generator(id: i64, secret: &'static str) -> Receiver<(i64, String, u64)> {
+    let (tx, rx) = mpsc::channel();
+
     thread::spawn(move || {
         loop {
             let otp = generate_otp(secret);
             let remaining = 30 - (SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() % 30);
 
-            println!("🔑 [{}] OTP: {} | ⏳ Refresh in: {}s", label, otp, remaining);
-            thread::sleep(Duration::from_secs(1)); 
+            // **Envoie les données au récepteur**
+            if tx.send((id, otp.clone(), remaining)).is_err() {
+                break; // Quitter le thread si le canal est fermé
+            }
+
+            thread::sleep(Duration::from_secs(1));
         }
     });
+
+    rx 
 }

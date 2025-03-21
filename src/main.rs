@@ -1,5 +1,3 @@
-use std::time::Duration;
-use std::thread;
 use gtk::prelude::*;
 use gtk::{glib, Application, Builder, CssProvider, Window};
 use gtk::gdk::Display;
@@ -8,14 +6,19 @@ use std::cell::RefCell;
 use gtk::gio;
 use gtk::gio::AppInfo;
 use rusqlite::{Connection, Result};
+use std::collections::HashMap;
+
+
+
 
 mod otp;
 use otp::start_otp_generator;
+
 mod data_filter;
 use data_filter::{serach_data, validate_data};
 
 mod database;
-use database::{init_db, insert_otp_object, select_data, select_data_cond};
+use database::{init_db, insert_otp_object, select_data, select_data_secret};
 
 const APP_ID: &str = "org.yonkotp.main";
 const UI_FILE: &str = "resources/window.ui";
@@ -70,10 +73,73 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
         });
     }
 
-    // Permet de garder le programme en exécution
-    loop {
-        thread::sleep(Duration::from_secs(10));
+        
+    if let Some(export_button) = builder.object::<gtk::Button>("export_button") {
+        export_button.connect_clicked(move |_| {
+            println!("Opening Export...");
+            // TODO: Afficher une fenêtre de paramètres
+        });
     }
+    
+    if let Some(about_button) = builder.object::<gtk::Button>("about_button") {
+        about_button.connect_clicked(move |_| {
+    
+            let about_dialog = gtk::AboutDialog::new();
+            about_dialog.set_program_name(Some("YonkOTP"));
+            about_dialog.set_version(Some("1.0.0"));
+            about_dialog.set_comments(Some("A simple OTP manager."));
+            about_dialog.set_website(Some("https://github.com/DVMkhpte/YonkOTP"));
+            about_dialog.set_website_label("GitHub Repository");
+            about_dialog.set_authors(&["Enzo Partel et Ryane Guehria"]);
+    
+            // Afficher la boîte de dialogue
+            about_dialog.set_visible(true);
+        });
+    }
+
+    // Récupérer la fenêtre modale
+    let add_key_window: Window = builder
+        .object("add_key_window")
+        .expect("Échec du chargement de la modale");
+
+    // Désactiver la minimisation et maximisation en enlevant la barre de titre
+    add_key_window.set_decorated(false);
+
+    // Empêcher le redimensionnement et rendre la fenêtre modale
+    add_key_window.set_transient_for(Some(&window)); // Associe la modale à la fenêtre principale
+    add_key_window.set_modal(true);
+
+    // Utilisation de Rc<RefCell<>> pour éviter les problèmes de propriété
+    let add_key_window_rc = Rc::new(RefCell::new(add_key_window));
+
+    // Récupérer les champs de texte
+    let service_entry = builder
+        .object::<gtk::Entry>("service_name_entry")
+        .expect("Champ service introuvable");
+    let username_mail_entry = builder
+        .object::<gtk::Entry>("username_mail_entry")
+        .expect("Champ username/mail introuvable");
+    let secret_entry = builder
+        .object::<gtk::Entry>("secret_key_entry")
+        .expect("Champ secret introuvable");
+
+    // Récupérer le bouton "Add" et afficher la modale quand on clique dessus
+    if let Some(button) = builder.object::<gtk::Button>("add_button") {
+        let add_key_window_clone = add_key_window_rc.clone();
+        
+        let service_entry_clone = service_entry.clone();
+        let username_mail_entry_clone = username_mail_entry.clone();
+        let secret_entry_clone = secret_entry.clone();
+
+        button.connect_clicked(move |_| {
+            // Réinitialiser les champs avant d'afficher la fenêtre
+            service_entry_clone.set_text("");
+            username_mail_entry_clone.set_text("");
+            secret_entry_clone.set_text("");
+
+            add_key_window_clone.borrow().set_visible(true);
+        });
+
 
     // Bouton "Cancel" pour fermer la modale
     if let Some(cancel_button) = builder.object::<gtk::Button>("cancel_button") {
@@ -122,65 +188,67 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
 
     window.present();
 }
+}
 
 fn populate_otp_list(listbox: &gtk::ListBox, conn: Rc<Connection>) {
-    // Effacer tous les enfants de la liste
-    while let Some(child) = listbox.first_child() {
-        listbox.remove(&child);
-    }
+    let label_map: Rc<RefCell<HashMap<i64, (gtk::Label, gtk::Label)>>> = Rc::new(RefCell::new(HashMap::new()));
 
-    // Récupérer les données depuis la BDD
     match select_data(&conn, AES_KEY) {
         Ok(data) => {
             for (id, service, username) in data {
-                add_otp_entry(listbox, id, &service, &username);
+                if let Ok(secret_key) = select_data_secret(&conn, AES_KEY, id) {
+                    let secret_key = secret_key.clone();
+                    let rx = start_otp_generator(id, Box::leak(secret_key.into_boxed_str()));
+
+                    let row = gtk::ListBoxRow::new();
+                    let container = gtk::Box::new(gtk::Orientation::Vertical, 5);
+
+                    let first_row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+                    let service_label = gtk::Label::new(Some(&format!("{}: {}", service, username)));
+                    service_label.set_halign(gtk::Align::Start);
+                    service_label.add_css_class("otp-name");
+
+                    let timer_label = gtk::Label::new(Some("30"));
+                    timer_label.set_halign(gtk::Align::End);
+                    timer_label.add_css_class("otp-timer");
+
+                    let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+                    spacer.set_hexpand(true);
+
+                    first_row.append(&service_label);
+                    first_row.append(&spacer);
+                    first_row.append(&timer_label);
+
+                    let otp_label = gtk::Label::new(Some("..."));
+                    otp_label.set_halign(gtk::Align::Start);
+                    otp_label.add_css_class("otp-code");
+
+                    container.append(&first_row);
+                    container.append(&otp_label);
+                    row.set_child(Some(&container));
+                    listbox.append(&row);
+
+                    // Stocker les labels dans la HashMap
+                    label_map.borrow_mut().insert(id, (otp_label.clone(), timer_label.clone()));
+
+                    // Mise à jour continue via timeout
+                    let label_map_clone = label_map.clone();
+                    glib::timeout_add_seconds_local(1, move || {
+                        if let Ok((id, otp, remaining)) = rx.try_recv() {
+                            if let Some((otp_label, timer_label)) = label_map_clone.borrow().get(&id) {
+                                otp_label.set_text(&otp);
+                                timer_label.set_text(&remaining.to_string());
+                            }
+                        }
+                        glib::ControlFlow::Continue
+                    });
+                }
             }
         }
         Err(err) => {
             eprintln!("Erreur lors de la récupération des données OTP : {}", err);
         }
     }
-}
-
-fn add_otp_entry(listbox: &gtk::ListBox, id: i64, service: &str, username: &str) {
-    let row = gtk::ListBoxRow::new();
-    let container = gtk::Box::new(gtk::Orientation::Vertical, 5);
-
-    // Première ligne : Service + Timer
-    let first_row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-    let service_label = gtk::Label::new(Some(&format!("{}: {}", service, username)));
-    service_label.set_halign(gtk::Align::Start);
-    service_label.add_css_class("otp-name");
-
-    let timer_label = gtk::Label::new(Some("30")); // Timer (à remplacer plus tard par un vrai countdown)
-    timer_label.set_halign(gtk::Align::End);
-    timer_label.add_css_class("otp-timer");
-
-    let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-    spacer.set_hexpand(true);
-
-    first_row.append(&service_label);
-    first_row.append(&spacer);
-    first_row.append(&timer_label);
-
-    // Deuxième ligne : Code OTP
-    let otp_label = gtk::Label::new(Some("123 789"));
-    otp_label.set_halign(gtk::Align::Start);
-    otp_label.add_css_class("otp-code");
-
-    // Ajouter les éléments au container principal
-    container.append(&first_row);
-    container.append(&otp_label);
-    
-    // Ajouter la structure complète à la ligne
-    row.set_child(Some(&container));
-
-    // Ajouter à la liste
-    listbox.append(&row);
-
-    // Ajouter un séparateur
-    let separator = gtk::Separator::new(gtk::Orientation::Horizontal);
-    listbox.append(&separator);
 }
 
 fn load_css() {
