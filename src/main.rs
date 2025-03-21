@@ -15,7 +15,7 @@ mod otp;
 use otp::start_otp_generator;
 
 mod data_filter;
-use data_filter::{serach_data, validate_data};
+use data_filter::validate_data;
 
 mod database;
 use database::{init_db, insert_otp_object, select_data, select_data_secret, export_to_csv};
@@ -57,6 +57,14 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
     .object::<gtk::ListBox>("otp_list")        
     .expect("Échec du chargement de la liste OTP");
 
+    let menu_button = builder
+    .object::<gtk::MenuButton>("menu_button")
+    .expect("Menu button manquant");
+
+    let menu_button_help = menu_button.clone();
+    let menu_button_export = menu_button.clone();
+    let menu_button_about = menu_button.clone();
+
     window.set_application(Some(app));
     window.set_resizable(false);
 
@@ -70,12 +78,14 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
             if let Err(err) = AppInfo::launch_default_for_uri(url, None::<&gio::AppLaunchContext>) {
                 eprintln!("Failed to open URL: {}", err);
             }
+            menu_button_help.set_active(false);
         });
     }
 
     if let Some(export_button) = builder.object::<gtk::Button>("export_button") {
         let conn_clone = conn.clone();
         let window_clone = window.clone();
+       
     
         export_button.connect_clicked(move |_| {
             let conn_in_save = conn_clone.clone(); 
@@ -103,10 +113,13 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
                     Err(err) => eprintln!("Erreur sélection fichier : {}", err),
                 }
             });
+            menu_button_export.set_active(false);
         });
+        
     }
     
     if let Some(about_button) = builder.object::<gtk::Button>("about_button") {
+        
         about_button.connect_clicked(move |_| {
     
             let about_dialog = gtk::AboutDialog::new();
@@ -119,6 +132,7 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
     
             // Afficher la boîte de dialogue
             about_dialog.set_visible(true);
+            menu_button_about.set_active(false);
         });
     }
 
