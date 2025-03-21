@@ -191,6 +191,11 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
 }
 
 fn populate_otp_list(listbox: &gtk::ListBox, conn: Rc<Connection>) {
+
+    while let Some(child) = listbox.first_child() {
+        listbox.remove(&child);
+    }
+    
     let label_map: Rc<RefCell<HashMap<i64, (gtk::Label, gtk::Label)>>> = Rc::new(RefCell::new(HashMap::new()));
 
     match select_data(&conn, AES_KEY) {
