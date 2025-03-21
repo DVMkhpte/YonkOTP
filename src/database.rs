@@ -2,6 +2,9 @@ use rusqlite::{params, Connection, Result};
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use base64::{engine::general_purpose, Engine};
+use csv::Writer;
+
+
 
 pub fn init_db(conn: &Connection) -> Result<()> {
     conn.execute(
@@ -116,4 +119,33 @@ pub fn select_data_cond(
         }
     }
     Ok(results)
+}
+
+pub fn export_to_csv(conn: &Connection, key: &[u8], file_path: &str) -> Result<(), Box<dyn std::error::Error>>{
+    let mut wtr = Writer::from_path(file_path)?;
+
+    // En-têtes du CSV
+    wtr.write_record(&["id", "service", "username/mail", "secret_key"])?;
+
+    let mut stmt = conn.prepare("SELECT id, service, u_m, secret_key FROM otp_object")?;
+    let rows = stmt.query_map([], |row| {
+        let id: i64 = row.get(0)?;
+        let enc_service: String = row.get(1)?;
+        let enc_u_m: String = row.get(2)?;
+        let enc_key: String = row.get(3)?;
+
+        let service = decrypt_from_base64(key, &enc_service);
+        let u_m = decrypt_from_base64(key, &enc_u_m);
+        let secret = decrypt_from_base64(key, &enc_key);
+
+        Ok((id.to_string(), service, u_m, secret))
+    })?;
+
+    for row in rows {
+        let (id, service, u_m, secret) = row?;
+        wtr.write_record(&[id, service, u_m, secret])?;
+    }
+
+    wtr.flush()?;
+    Ok(())
 }

@@ -1,5 +1,5 @@
 use std::thread;
-use std::sync::mpsc::{self, Sender, Receiver};
+use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use totp_rs::{Algorithm, TOTP};
 

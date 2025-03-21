@@ -18,7 +18,7 @@ mod data_filter;
 use data_filter::{serach_data, validate_data};
 
 mod database;
-use database::{init_db, insert_otp_object, select_data, select_data_secret};
+use database::{init_db, insert_otp_object, select_data, select_data_secret, export_to_csv};
 
 const APP_ID: &str = "org.yonkotp.main";
 const UI_FILE: &str = "resources/window.ui";
@@ -73,11 +73,36 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
         });
     }
 
-        
     if let Some(export_button) = builder.object::<gtk::Button>("export_button") {
+        let conn_clone = conn.clone();
+        let window_clone = window.clone();
+    
         export_button.connect_clicked(move |_| {
-            println!("Opening Export...");
-            // TODO: Afficher une fenêtre de paramètres
+            let conn_in_save = conn_clone.clone(); 
+            let file_dialog = gtk::FileDialog::new();
+            file_dialog.set_title("Exporter en CSV");
+            file_dialog.set_initial_name(Some("export_otp.csv"));
+    
+            file_dialog.save(Some(&window_clone), None::<&gio::Cancellable>, move |result| {
+                match result {
+                    Ok(file) => {
+                        if let Some(path) = file.path() {
+                            let file_path = path.to_string_lossy().to_string();
+    
+                            match export_to_csv(&conn_in_save, AES_KEY, &file_path) {
+                                Ok(_) => {
+                                    println!("Exporté avec succès : {}", file_path);
+                                    if let Some(parent_dir) = std::path::Path::new(&file_path).parent() {
+                                        let _ = open::that(parent_dir);
+                                    }
+                                }
+                                Err(e) => eprintln!("Erreur d'export : {}", e),
+                            }
+                        }
+                    }
+                    Err(err) => eprintln!("Erreur sélection fichier : {}", err),
+                }
+            });
         });
     }
     
@@ -90,7 +115,7 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
             about_dialog.set_comments(Some("A simple OTP manager."));
             about_dialog.set_website(Some("https://github.com/DVMkhpte/YonkOTP"));
             about_dialog.set_website_label("GitHub Repository");
-            about_dialog.set_authors(&["Enzo Partel et Ryane Guehria"]);
+            about_dialog.set_authors(&["Enzo Partel | DVM_khpte et Ryane Guehria | ryatozz"]);
     
             // Afficher la boîte de dialogue
             about_dialog.set_visible(true);
@@ -171,7 +196,7 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
                     println!("Données valides : Service: {}, Username/Mail: {}, Key: {}", 
                              service_name, username_mail, secret_key);
 
-                    insert_otp_object(&conn, service_name.as_str(), username_mail.as_str(), secret_key.as_str(), AES_KEY);
+                    let _ = insert_otp_object(&conn, service_name.as_str(), username_mail.as_str(), secret_key.as_str(), AES_KEY);
                     // Ajouter à la liste OTP
                     populate_otp_list(&listbox, conn.clone());
     
@@ -195,7 +220,7 @@ fn populate_otp_list(listbox: &gtk::ListBox, conn: Rc<Connection>) {
     while let Some(child) = listbox.first_child() {
         listbox.remove(&child);
     }
-    
+
     let label_map: Rc<RefCell<HashMap<i64, (gtk::Label, gtk::Label)>>> = Rc::new(RefCell::new(HashMap::new()));
 
     match select_data(&conn, AES_KEY) {

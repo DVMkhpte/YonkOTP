@@ -10,7 +10,8 @@ totp-rs = "5.1.1"
 rusqlite = "0.34.0"
 aes-gcm = "0.10"
 base64 = "0.22.1"
-
+open = "5.0"
+csv = "1.3"
 
 
 
