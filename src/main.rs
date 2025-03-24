@@ -7,6 +7,7 @@ use gtk::gio;
 use gtk::gio::AppInfo;
 use rusqlite::{Connection, Result};
 use std::collections::HashMap;
+use glib::clone;
 
 
 
@@ -148,7 +149,6 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
     add_key_window.set_transient_for(Some(&window)); // Associe la modale à la fenêtre principale
     add_key_window.set_modal(true);
 
-    // Utilisation de Rc<RefCell<>> pour éviter les problèmes de propriété
     let add_key_window_rc = Rc::new(RefCell::new(add_key_window));
 
     // Récupérer les champs de texte
@@ -171,7 +171,6 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
         let secret_entry_clone = secret_entry.clone();
 
         button.connect_clicked(move |_| {
-            // Réinitialiser les champs avant d'afficher la fenêtre
             service_entry_clone.set_text("");
             username_mail_entry_clone.set_text("");
             secret_entry_clone.set_text("");
@@ -211,7 +210,6 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
                              service_name, username_mail, secret_key);
 
                     let _ = insert_otp_object(&conn, service_name.as_str(), username_mail.as_str(), secret_key.as_str(), AES_KEY);
-                    // Ajouter à la liste OTP
                     populate_otp_list(&listbox, conn.clone());
     
                     add_key_window_clone.borrow().set_visible(false);
@@ -219,7 +217,6 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
                 Err(err) => {
                     println!("Erreur de validation : {}", err);
                     error_label.set_text(&err);
-                    // TODO: Afficher une alerte GTK (message d'erreur)
                 }
             }
         });
@@ -236,6 +233,11 @@ fn populate_otp_list(listbox: &gtk::ListBox, conn: Rc<Connection>) {
     }
 
     let label_map: Rc<RefCell<HashMap<i64, (gtk::Label, gtk::Label)>>> = Rc::new(RefCell::new(HashMap::new()));
+
+    let toast_label = Rc::new(gtk::Label::new(Some("Copied!")));
+    toast_label.add_css_class("toast-label");
+    toast_label.set_visible(false);
+    listbox.append(&*toast_label);
 
     match select_data(&conn, AES_KEY) {
         Ok(data) => {
@@ -272,10 +274,32 @@ fn populate_otp_list(listbox: &gtk::ListBox, conn: Rc<Connection>) {
                     row.set_child(Some(&container));
                     listbox.append(&row);
 
-                    // Stocker les labels dans la HashMap
+                    let otp_label_for_copy = otp_label.clone();
+                    let toast_label_clone = toast_label.clone();
+                    let gesture = gtk::GestureClick::new();
+                    gesture.set_button(0); // 0 = tous les boutons, ou 1 pour clic gauche
+
+                    gesture.connect_pressed(move |_gesture, n_press, _x, _y| {
+                        if n_press == 1 {
+                            if let Some(display) = Display::default() {
+                                let clipboard = display.clipboard();
+                                let otp_text = otp_label_for_copy.text();
+                                clipboard.set_text(&otp_text);
+
+                                toast_label_clone.set_visible(true);
+                                glib::timeout_add_seconds_local(2, clone!(@strong toast_label_clone => move || {
+                                    toast_label_clone.set_visible(false);
+                                    glib::ControlFlow::Break
+                                }));
+                                
+                            }
+                        }
+                    });
+
+                    // Attacher le gesture au row
+                    row.add_controller(gesture);
                     label_map.borrow_mut().insert(id, (otp_label.clone(), timer_label.clone()));
 
-                    // Mise à jour continue via timeout
                     let label_map_clone = label_map.clone();
                     glib::timeout_add_seconds_local(1, move || {
                         if let Ok((id, otp, remaining)) = rx.try_recv() {
@@ -353,10 +377,18 @@ fn load_css() {
         .menu-button:hover {
             background: rgba(255, 255, 255, 0.1);
         }
+        .toast-label {
+        color: #fff;
+        background-color: rgba(0, 0, 0, 0.6);
+        border-radius: 10px;
+        padding: 8px 12px;
+        margin: 10px;
+        font-weight: bold;
+        font-size: 14px;
+        transition: opacity 0.3s;
+    }
     ");
 
     let display = Display::default().expect("Impossible de récupérer l'affichage");
-    
-    // Utilisation de la nouvelle fonction recommandée
     gtk::style_context_add_provider_for_display(&display, &provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
 }
