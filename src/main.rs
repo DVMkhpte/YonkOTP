@@ -7,8 +7,6 @@ use gtk::gio;
 use gtk::gio::AppInfo;
 use rusqlite::{Connection, Result};
 use std::collections::HashMap;
-use glib::clone;
-
 mod otp;
 use otp::start_otp_generator;
 
@@ -62,7 +60,7 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
     window.set_application(Some(app));
     window.set_resizable(false);
 
-    // Ici, on passe une référence à window. Comme build_ui possède toujours window, aucun problème.
+    // On peuple la liste
     populate_otp_list(&listbox, conn.clone(), &window);
 
     load_css();
@@ -121,7 +119,6 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
             about_dialog.set_website_label("GitHub Repository");
             about_dialog.set_authors(&["Enzo Partel | DVM_khpte et Ryane Guehria | ryatozz"]);
 
-            // Afficher la boîte de dialogue
             about_dialog.set_visible(true);
             menu_button_about.set_active(false);
         });
@@ -132,11 +129,8 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
         .object("add_key_window")
         .expect("Échec du chargement de la modale");
 
-    // Désactiver la minimisation et maximisation en enlevant la barre de titre
     add_key_window.set_decorated(false);
-
-    // Empêcher le redimensionnement et rendre la fenêtre modale
-    add_key_window.set_transient_for(Some(&window)); // On passe une référence ici
+    add_key_window.set_transient_for(Some(&window));
     add_key_window.set_modal(true);
 
     let add_key_window_rc = Rc::new(RefCell::new(add_key_window));
@@ -184,7 +178,6 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
                 .object::<gtk::Label>("error_label")
                 .expect("Échec de récupération du label d'erreur");
 
-            // Clonage de window pour l'utiliser dans la closure sans déplacer l'original
             let window_clone_for_save = window.clone();
             save_button.connect_clicked(move |_| {
                 let service_name = service_entry_clone.text();
@@ -193,12 +186,18 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
 
                 match validate_data(&service_name, &username_mail, &secret_key) {
                     Ok(_) => {
-                        println!("Données valides : Service: {}, Username/Mail: {}, Key: {}", 
+                        println!("Données valides : Service: {}, Username/Mail: {}, Key: {}",
                                  service_name, username_mail, secret_key);
 
-                        let _ = insert_otp_object(&conn, service_name.as_str(), username_mail.as_str(), secret_key.as_str(), AES_KEY);
-                        populate_otp_list(&listbox, conn.clone(), &window_clone_for_save);
+                        let _ = insert_otp_object(
+                            &conn,
+                            service_name.as_str(),
+                            username_mail.as_str(),
+                            secret_key.as_str(),
+                            AES_KEY,
+                        );
 
+                        populate_otp_list(&listbox, conn.clone(), &window_clone_for_save);
                         add_key_window_clone.borrow().set_visible(false);
                     }
                     Err(err) => {
@@ -213,142 +212,215 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
     window.present();
 }
 
-fn populate_otp_list<W: IsA<gtk::Window>>(listbox: &gtk::ListBox, conn: Rc<Connection>, parent_window: &W) {
+fn populate_otp_list<W: IsA<gtk::Window>>(
+    listbox: &gtk::ListBox,
+    conn: Rc<Connection>,
+    parent_window: &W
+) {
     // Supprime tous les enfants existants
     while let Some(child) = listbox.first_child() {
         listbox.remove(&child);
     }
 
-    // Préparer une map pour mettre à jour les labels, etc.
-    let label_map: Rc<RefCell<HashMap<i64, (gtk::Label, gtk::Label)>>> = Rc::new(RefCell::new(HashMap::new()));
+    // Préparer une map pour mettre à jour les labels
+    let label_map: Rc<RefCell<HashMap<i64, (gtk::Label, gtk::Label)>>> =
+        Rc::new(RefCell::new(HashMap::new()));
 
-    // Label pour notifier la copie (déjà présent)
+    // Label pour notifier la copie
     let toast_label = Rc::new(gtk::Label::new(Some("Copied!")));
     toast_label.add_css_class("toast-label");
     toast_label.set_visible(false);
     listbox.append(&*toast_label);
 
-    // Récupérer les données OTP depuis la BDD
     match select_data(&conn, AES_KEY) {
         Ok(data) => {
             for (id, service, username) in data {
-                if let Ok(secret_key) = select_data_secret(&conn, AES_KEY, id) {
-                    let secret_key = secret_key.clone();
-                    let rx = start_otp_generator(id, Box::leak(secret_key.into_boxed_str()));
+                // On récupère la clé secrète
+                match select_data_secret(&conn, AES_KEY, id) {
+                    Ok(secret_key) => {
+                        let rx = start_otp_generator(id, Box::leak(secret_key.into_boxed_str()));
 
-                    let row = gtk::ListBoxRow::new();
-                    let container = gtk::Box::new(gtk::Orientation::Vertical, 5);
+                        let row = gtk::ListBoxRow::new();
+                        let container = gtk::Box::new(gtk::Orientation::Vertical, 5);
 
-                    let first_row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-                    let service_label = gtk::Label::new(Some(&format!("{}: {}", service, username)));
-                    service_label.set_halign(gtk::Align::Start);
-                    service_label.add_css_class("otp-name");
+                        let first_row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+                        let service_label = gtk::Label::new(
+                            Some(&format!("{}: {}", service, username))
+                        );
+                        service_label.set_halign(gtk::Align::Start);
+                        service_label.add_css_class("otp-name");
 
-                    let timer_label = gtk::Label::new(Some("30"));
-                    timer_label.set_halign(gtk::Align::End);
-                    timer_label.add_css_class("otp-timer");
+                        let timer_label = gtk::Label::new(Some("30"));
+                        timer_label.set_halign(gtk::Align::End);
+                        timer_label.add_css_class("otp-timer");
 
-                    let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-                    spacer.set_hexpand(true);
+                        let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+                        spacer.set_hexpand(true);
 
-                    first_row.append(&service_label);
-                    first_row.append(&spacer);
-                    first_row.append(&timer_label);
+                        first_row.append(&service_label);
+                        first_row.append(&spacer);
+                        first_row.append(&timer_label);
 
-                    let otp_label = gtk::Label::new(Some("..."));
-                    otp_label.set_halign(gtk::Align::Start);
-                    otp_label.add_css_class("otp-code");
+                        let otp_label = gtk::Label::new(Some("..."));
+                        otp_label.set_halign(gtk::Align::Start);
+                        otp_label.add_css_class("otp-code");
 
-                    container.append(&first_row);
-                    container.append(&otp_label);
-                    row.set_child(Some(&container));
+                        container.append(&first_row);
+                        container.append(&otp_label);
+                        row.set_child(Some(&container));
 
-                    // GESTURE : clic gauche pour copier le OTP
-                    let gesture_left = gtk::GestureClick::new();
-                    gesture_left.set_button(1); // Clic gauche
-                    {
-                        let otp_label_for_copy = otp_label.clone();
-                        let toast_label_clone = toast_label.clone();
-                        gesture_left.connect_pressed(move |_gesture, _n_press, _x, _y| {
-                            if let Some(display) = gtk::gdk::Display::default() {
-                                let clipboard = display.clipboard();
-                                let otp_text = otp_label_for_copy.text();
-                                clipboard.set_text(&otp_text);
+                        // Clic gauche : copier le OTP
+                        let gesture_left = gtk::GestureClick::new();
+                        gesture_left.set_button(1);
+                        {
+                            let otp_label_for_copy = otp_label.clone();
+                            let toast_label_clone = toast_label.clone();
+                            gesture_left.connect_pressed(move |_gesture, _n_press, _x, _y| {
+                                if let Some(display) = gtk::gdk::Display::default() {
+                                    let clipboard = display.clipboard();
+                                    let otp_text = otp_label_for_copy.text();
+                                    clipboard.set_text(&otp_text);
 
-                                toast_label_clone.set_visible(true);
-                                glib::timeout_add_seconds_local(2, clone!(@strong toast_label_clone => move || {
-                                    toast_label_clone.set_visible(false);
-                                    glib::ControlFlow::Break
-                                }));
+                                    let toast_label_clone = toast_label_clone.clone();
+                                    glib::timeout_add_seconds_local(2, move || {
+                                        toast_label_clone.set_visible(false);
+                                        glib::ControlFlow::Break
+                                    });
+
+                                }
+                            });
+                        }
+                        row.add_controller(gesture_left);
+
+                        
+                        
+                        // --- Clic droit : configuration du popover et du bouton "Supprimer" ---
+
+                        // Déclare le gesture pour le clic droit
+                        let gesture_right = gtk::GestureClick::new();
+                        gesture_right.set_button(3);
+
+                        // Crée le popover et son contenu
+                        let popover = gtk::Popover::new();
+                        popover.set_has_arrow(false);
+                        let vbox_menu = gtk::Box::new(gtk::Orientation::Vertical, 0);
+                        let supprimer_button = gtk::Button::with_label("Supprimer");
+                        vbox_menu.append(&supprimer_button);
+                        popover.set_child(Some(&vbox_menu));
+
+                        // Ajoute le gesture_right à la row (clone pour éviter le move)
+                        row.add_controller(gesture_right.clone());
+
+                        // Connecte une closure pour afficher le popover au clic droit
+                        {
+                            let gesture_right_for_conn = gesture_right.clone();
+                            let popover_for_conn = popover.clone();
+                            let row_for_conn = row.clone();
+                            gesture_right_for_conn.connect_pressed(move |_gesture, n_press, x, y| {
+                                if n_press == 1 {
+                                    let rect = gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1);
+                                    popover_for_conn.set_pointing_to(Some(&rect));
+                                    popover_for_conn.set_parent(&row_for_conn);
+                                    popover_for_conn.popup();
+                                }
+                            });
+                        }
+
+                        // Configure le bouton "Supprimer" pour afficher la confirmation
+                        // Bouton « Supprimer » → confirmation
+                        
+                        // Bouton « Supprimer » → confirmation
+{
+    let conn_clone = conn.clone();
+    let listbox_clone = listbox.clone();
+    let parent_window_clone = parent_window.clone();
+    let popover_for_delete = popover.clone();
+    supprimer_button.connect_clicked(move |_| {
+        popover_for_delete.popdown();
+
+        // Clonages nécessaires pour la closure
+        let conn_inner = conn_clone.clone();
+        let listbox_inner = listbox_clone.clone();
+        // Clone pour passer à la fois à la boîte de dialogue et dans la closure
+        let parent_for_dialog = parent_window_clone.clone();
+
+        // Crée une boîte de dialogue avec deux boutons : "Supprimer" (Accept) et "Annuler" (Cancel)
+        let dialog = gtk::Dialog::with_buttons(
+            Some("Confirmation"),
+            Some(&parent_for_dialog),
+            gtk::DialogFlags::MODAL,
+            &[
+                ("Supprimer", gtk::ResponseType::Accept),
+                ("Annuler", gtk::ResponseType::Cancel),
+            ],
+        );
+
+        dialog.connect_response(move |d, response| {
+            if response == gtk::ResponseType::Accept {
+                // On clone la fenêtre parente pour l'utiliser dans populate_otp_list
+                let parent_final = parent_for_dialog.clone();
+                match database::delete_otp_object(&conn_inner, id) {
+                    Ok(_) => {
+                        populate_otp_list(&listbox_inner, conn_inner.clone(), &parent_final);
+                    }
+                    Err(e) => {
+                        eprintln!("Erreur de suppression: {}", e);
+                    }
+                }
+            }
+            d.close();
+        });
+        dialog.present();
+    });
+}
+
+                        
+                        
+
+
+
+
+
+
+
+                        // Ajoute le row à la liste
+                        listbox.append(&row);
+
+                        // Mémorise les labels pour la mise à jour du code OTP
+                        label_map.borrow_mut().insert(
+                            id,
+                            (otp_label.clone(), timer_label.clone())
+                        );
+
+                        // Mise à jour toutes les secondes
+                        let label_map_clone = label_map.clone();
+                        glib::timeout_add_seconds_local(1, move || {
+                            if let Ok((id, otp, remaining)) = rx.try_recv() {
+                                if let Some((otp_label, timer_label)) =
+                                    label_map_clone.borrow().get(&id)
+                                {
+                                    otp_label.set_text(&otp);
+                                    timer_label.set_text(&remaining.to_string());
+                                }
                             }
+                            glib::ControlFlow::Continue
                         });
                     }
-                    row.add_controller(gesture_left);
-
-                    // GESTURE : clic droit pour supprimer
-                    let gesture_right = gtk::GestureClick::new();
-                    gesture_right.set_button(3); // Clic droit
-                    {
-                        let conn_clone = conn.clone();
-                        let listbox_clone = listbox.clone();
-                        let parent_window_clone = parent_window.clone();
-                        gesture_right.connect_pressed(clone!(@strong parent_window_clone => move |_gesture, _n_press, _x, _y| {
-                            // Crée la boîte de dialogue de confirmation
-                            let dialog = gtk::MessageDialog::builder()
-                                .transient_for(&parent_window_clone)
-                                .modal(true)
-                                .message_type(gtk::MessageType::Question)
-                                .buttons(gtk::ButtonsType::YesNo)
-                                .text("Voulez-vous supprimer cet OTP ?")
-                                .build();
-
-                            dialog.connect_response(clone!(@strong conn_clone, @strong listbox_clone, @strong parent_window_clone => move |d, response| {
-                                if response == gtk::ResponseType::Yes {
-                                    // Appel de la fonction de suppression dans la BDD
-                                    match database::delete_otp_object(&conn_clone, id) {
-                                        Ok(_) => {
-                                            // Recharger la liste après suppression
-                                            populate_otp_list(&listbox_clone, conn_clone.clone(), &parent_window_clone);
-                                        },
-                                        Err(e) => {
-                                            eprintln!("Erreur de suppression: {}", e);
-                                        }
-                                    }
-                                }
-                                d.close();
-                            }));
-                            dialog.show();
-                        }));
+                    Err(e) => {
+                        eprintln!("Erreur lors du select_data_secret pour id {}: {}", id, e);
                     }
-                    row.add_controller(gesture_right);
-
-                    // Ajoute le row à la liste
-                    listbox.append(&row);
-                    label_map.borrow_mut().insert(id, (otp_label.clone(), timer_label.clone()));
-
-                    let label_map_clone = label_map.clone();
-                    glib::timeout_add_seconds_local(1, move || {
-                        if let Ok((id, otp, remaining)) = rx.try_recv() {
-                            if let Some((otp_label, timer_label)) = label_map_clone.borrow().get(&id) {
-                                otp_label.set_text(&otp);
-                                timer_label.set_text(&remaining.to_string());
-                            }
-                        }
-                        glib::ControlFlow::Continue
-                    });
                 }
             }
         }
         Err(err) => {
             eprintln!("Erreur lors de la récupération des données OTP : {}", err);
         }
-    }
-}
+    } // <-- Fin du match sur select_data
+} // <-- Fin de la fonction populate_otp_list
 
 fn load_css() {
     let provider = CssProvider::new();
-    provider
-        .load_from_string("
+    provider.load_from_string("
         .title-label {
             font-size: 24px;
             font-weight: bold;
@@ -416,5 +488,9 @@ fn load_css() {
     ");
 
     let display = Display::default().expect("Impossible de récupérer l'affichage");
-    gtk::style_context_add_provider_for_display(&display, &provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    gtk::style_context_add_provider_for_display(
+        &display,
+        &provider,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
 }
