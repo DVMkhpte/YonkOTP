@@ -9,9 +9,6 @@ use rusqlite::{Connection, Result};
 use std::collections::HashMap;
 use glib::clone;
 
-
-
-
 mod otp;
 use otp::start_otp_generator;
 
@@ -25,9 +22,6 @@ const APP_ID: &str = "org.yonkotp.main";
 const UI_FILE: &str = "resources/window.ui";
 const DB_FILE: &str = "database/yonkotp_data.db";
 const AES_KEY: &[u8; 32] = b"01234567890123456789012345678901";
-
-
-
 
 fn main() -> Result<()> {
     // Crée l'application GTK
@@ -45,7 +39,6 @@ fn main() -> Result<()> {
 }
     
 fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
-    
     // Charger l'interface à partir du fichier XML
     let builder = Builder::from_file(UI_FILE);
     
@@ -55,12 +48,12 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
         .expect("Échec du chargement de la fenêtre");
 
     let listbox = builder
-    .object::<gtk::ListBox>("otp_list")        
-    .expect("Échec du chargement de la liste OTP");
+        .object::<gtk::ListBox>("otp_list")
+        .expect("Échec du chargement de la liste OTP");
 
     let menu_button = builder
-    .object::<gtk::MenuButton>("menu_button")
-    .expect("Menu button manquant");
+        .object::<gtk::MenuButton>("menu_button")
+        .expect("Menu button manquant");
 
     let menu_button_help = menu_button.clone();
     let menu_button_export = menu_button.clone();
@@ -69,7 +62,8 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
     window.set_application(Some(app));
     window.set_resizable(false);
 
-    populate_otp_list(&listbox, conn.clone());
+    // Ici, on passe une référence à window. Comme build_ui possède toujours window, aucun problème.
+    populate_otp_list(&listbox, conn.clone(), &window);
 
     load_css();
     
@@ -86,7 +80,6 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
     if let Some(export_button) = builder.object::<gtk::Button>("export_button") {
         let conn_clone = conn.clone();
         let window_clone = window.clone();
-       
     
         export_button.connect_clicked(move |_| {
             let conn_in_save = conn_clone.clone(); 
@@ -116,13 +109,10 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
             });
             menu_button_export.set_active(false);
         });
-        
     }
     
     if let Some(about_button) = builder.object::<gtk::Button>("about_button") {
-        
         about_button.connect_clicked(move |_| {
-    
             let about_dialog = gtk::AboutDialog::new();
             about_dialog.set_program_name(Some("YonkOTP"));
             about_dialog.set_version(Some("1.0.0"));
@@ -130,7 +120,7 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
             about_dialog.set_website(Some("https://github.com/DVMkhpte/YonkOTP"));
             about_dialog.set_website_label("GitHub Repository");
             about_dialog.set_authors(&["Enzo Partel | DVM_khpte et Ryane Guehria | ryatozz"]);
-    
+
             // Afficher la boîte de dialogue
             about_dialog.set_visible(true);
             menu_button_about.set_active(false);
@@ -146,7 +136,7 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
     add_key_window.set_decorated(false);
 
     // Empêcher le redimensionnement et rendre la fenêtre modale
-    add_key_window.set_transient_for(Some(&window)); // Associe la modale à la fenêtre principale
+    add_key_window.set_transient_for(Some(&window)); // On passe une référence ici
     add_key_window.set_modal(true);
 
     let add_key_window_rc = Rc::new(RefCell::new(add_key_window));
@@ -165,7 +155,6 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
     // Récupérer le bouton "Add" et afficher la modale quand on clique dessus
     if let Some(button) = builder.object::<gtk::Button>("add_button") {
         let add_key_window_clone = add_key_window_rc.clone();
-        
         let service_entry_clone = service_entry.clone();
         let username_mail_entry_clone = username_mail_entry.clone();
         let secret_entry_clone = secret_entry.clone();
@@ -174,71 +163,72 @@ fn build_ui(app: &gtk::Application, conn: Rc<Connection>) {
             service_entry_clone.set_text("");
             username_mail_entry_clone.set_text("");
             secret_entry_clone.set_text("");
-
             add_key_window_clone.borrow().set_visible(true);
         });
 
+        // Bouton "Cancel" pour fermer la modale
+        if let Some(cancel_button) = builder.object::<gtk::Button>("cancel_button") {
+            let add_key_window_clone = add_key_window_rc.clone();
+            cancel_button.connect_clicked(move |_| {
+                add_key_window_clone.borrow().set_visible(false);
+            });
+        }
 
-    // Bouton "Cancel" pour fermer la modale
-    if let Some(cancel_button) = builder.object::<gtk::Button>("cancel_button") {
-        let add_key_window_clone = add_key_window_rc.clone();
-        cancel_button.connect_clicked(move |_| {
-            add_key_window_clone.borrow().set_visible(false);
-        });
-    }
+        // Bouton "Save" pour récupérer les inputs et fermer la modale
+        if let Some(save_button) = builder.object::<gtk::Button>("save_button") {
+            let add_key_window_clone = add_key_window_rc.clone();
+            let service_entry_clone = service_entry.clone();
+            let username_mail_entry_clone = username_mail_entry.clone();
+            let secret_entry_clone = secret_entry.clone();
+            let error_label = builder
+                .object::<gtk::Label>("error_label")
+                .expect("Échec de récupération du label d'erreur");
 
-    // Bouton "Save" pour récupérer les inputs et fermer la modale
-    if let Some(save_button) = builder.object::<gtk::Button>("save_button") {
-        let add_key_window_clone = add_key_window_rc.clone();
-        
-        let service_entry_clone = service_entry.clone();
-        let username_mail_entry_clone = username_mail_entry.clone();
-        let secret_entry_clone = secret_entry.clone();
+            // Clonage de window pour l'utiliser dans la closure sans déplacer l'original
+            let window_clone_for_save = window.clone();
+            save_button.connect_clicked(move |_| {
+                let service_name = service_entry_clone.text();
+                let username_mail = username_mail_entry_clone.text();
+                let secret_key = secret_entry_clone.text();
 
-        let error_label = builder
-        .object::<gtk::Label>("error_label")
-        .expect("Échec de récupération du label d'erreur");
+                match validate_data(&service_name, &username_mail, &secret_key) {
+                    Ok(_) => {
+                        println!("Données valides : Service: {}, Username/Mail: {}, Key: {}", 
+                                 service_name, username_mail, secret_key);
 
-        save_button.connect_clicked(move |_| {
-            let service_name = service_entry_clone.text();
-            let username_mail = username_mail_entry_clone.text();
-            let secret_key = secret_entry_clone.text();
+                        let _ = insert_otp_object(&conn, service_name.as_str(), username_mail.as_str(), secret_key.as_str(), AES_KEY);
+                        populate_otp_list(&listbox, conn.clone(), &window_clone_for_save);
 
-            match validate_data(&service_name, &username_mail, &secret_key) {
-                Ok(_) => {
-                    println!("Données valides : Service: {}, Username/Mail: {}, Key: {}", 
-                             service_name, username_mail, secret_key);
-
-                    let _ = insert_otp_object(&conn, service_name.as_str(), username_mail.as_str(), secret_key.as_str(), AES_KEY);
-                    populate_otp_list(&listbox, conn.clone());
-    
-                    add_key_window_clone.borrow().set_visible(false);
+                        add_key_window_clone.borrow().set_visible(false);
+                    }
+                    Err(err) => {
+                        println!("Erreur de validation : {}", err);
+                        error_label.set_text(&err);
+                    }
                 }
-                Err(err) => {
-                    println!("Erreur de validation : {}", err);
-                    error_label.set_text(&err);
-                }
-            }
-        });
+            });
+        }
     }
 
     window.present();
 }
-}
 
-fn populate_otp_list(listbox: &gtk::ListBox, conn: Rc<Connection>) {
-
+fn populate_otp_list<W: IsA<gtk::Window>>(listbox: &gtk::ListBox, conn: Rc<Connection>, parent_window: &W) {
+    // Supprime tous les enfants existants
     while let Some(child) = listbox.first_child() {
         listbox.remove(&child);
     }
 
+    // Préparer une map pour mettre à jour les labels, etc.
     let label_map: Rc<RefCell<HashMap<i64, (gtk::Label, gtk::Label)>>> = Rc::new(RefCell::new(HashMap::new()));
 
+    // Label pour notifier la copie (déjà présent)
     let toast_label = Rc::new(gtk::Label::new(Some("Copied!")));
     toast_label.add_css_class("toast-label");
     toast_label.set_visible(false);
     listbox.append(&*toast_label);
 
+    // Récupérer les données OTP depuis la BDD
     match select_data(&conn, AES_KEY) {
         Ok(data) => {
             for (id, service, username) in data {
@@ -272,16 +262,15 @@ fn populate_otp_list(listbox: &gtk::ListBox, conn: Rc<Connection>) {
                     container.append(&first_row);
                     container.append(&otp_label);
                     row.set_child(Some(&container));
-                    listbox.append(&row);
 
-                    let otp_label_for_copy = otp_label.clone();
-                    let toast_label_clone = toast_label.clone();
-                    let gesture = gtk::GestureClick::new();
-                    gesture.set_button(0); // 0 = tous les boutons, ou 1 pour clic gauche
-
-                    gesture.connect_pressed(move |_gesture, n_press, _x, _y| {
-                        if n_press == 1 {
-                            if let Some(display) = Display::default() {
+                    // GESTURE : clic gauche pour copier le OTP
+                    let gesture_left = gtk::GestureClick::new();
+                    gesture_left.set_button(1); // Clic gauche
+                    {
+                        let otp_label_for_copy = otp_label.clone();
+                        let toast_label_clone = toast_label.clone();
+                        gesture_left.connect_pressed(move |_gesture, _n_press, _x, _y| {
+                            if let Some(display) = gtk::gdk::Display::default() {
                                 let clipboard = display.clipboard();
                                 let otp_text = otp_label_for_copy.text();
                                 clipboard.set_text(&otp_text);
@@ -291,13 +280,50 @@ fn populate_otp_list(listbox: &gtk::ListBox, conn: Rc<Connection>) {
                                     toast_label_clone.set_visible(false);
                                     glib::ControlFlow::Break
                                 }));
-                                
                             }
-                        }
-                    });
+                        });
+                    }
+                    row.add_controller(gesture_left);
 
-                    // Attacher le gesture au row
-                    row.add_controller(gesture);
+                    // GESTURE : clic droit pour supprimer
+                    let gesture_right = gtk::GestureClick::new();
+                    gesture_right.set_button(3); // Clic droit
+                    {
+                        let conn_clone = conn.clone();
+                        let listbox_clone = listbox.clone();
+                        let parent_window_clone = parent_window.clone();
+                        gesture_right.connect_pressed(clone!(@strong parent_window_clone => move |_gesture, _n_press, _x, _y| {
+                            // Crée la boîte de dialogue de confirmation
+                            let dialog = gtk::MessageDialog::builder()
+                                .transient_for(&parent_window_clone)
+                                .modal(true)
+                                .message_type(gtk::MessageType::Question)
+                                .buttons(gtk::ButtonsType::YesNo)
+                                .text("Voulez-vous supprimer cet OTP ?")
+                                .build();
+
+                            dialog.connect_response(clone!(@strong conn_clone, @strong listbox_clone, @strong parent_window_clone => move |d, response| {
+                                if response == gtk::ResponseType::Yes {
+                                    // Appel de la fonction de suppression dans la BDD
+                                    match database::delete_otp_object(&conn_clone, id) {
+                                        Ok(_) => {
+                                            // Recharger la liste après suppression
+                                            populate_otp_list(&listbox_clone, conn_clone.clone(), &parent_window_clone);
+                                        },
+                                        Err(e) => {
+                                            eprintln!("Erreur de suppression: {}", e);
+                                        }
+                                    }
+                                }
+                                d.close();
+                            }));
+                            dialog.show();
+                        }));
+                    }
+                    row.add_controller(gesture_right);
+
+                    // Ajoute le row à la liste
+                    listbox.append(&row);
                     label_map.borrow_mut().insert(id, (otp_label.clone(), timer_label.clone()));
 
                     let label_map_clone = label_map.clone();
@@ -378,15 +404,15 @@ fn load_css() {
             background: rgba(255, 255, 255, 0.1);
         }
         .toast-label {
-        color: #fff;
-        background-color: rgba(0, 0, 0, 0.6);
-        border-radius: 10px;
-        padding: 8px 12px;
-        margin: 10px;
-        font-weight: bold;
-        font-size: 14px;
-        transition: opacity 0.3s;
-    }
+            color: #fff;
+            background-color: rgba(0, 0, 0, 0.6);
+            border-radius: 10px;
+            padding: 8px 12px;
+            margin: 10px;
+            font-weight: bold;
+            font-size: 14px;
+            transition: opacity 0.3s;
+        }
     ");
 
     let display = Display::default().expect("Impossible de récupérer l'affichage");

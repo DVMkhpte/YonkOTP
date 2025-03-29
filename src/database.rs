@@ -81,6 +81,15 @@ pub fn select_data(
     Ok(results)
 }
 
+
+//fonction de delete
+
+pub fn delete_otp_object(conn: &Connection, id: i64) -> rusqlite::Result<usize> {
+    conn.execute(
+        "DELETE FROM otp_object WHERE id = ?1",
+        rusqlite::params![id],
+    )
+}
 pub fn select_data_secret(
     conn: &Connection,
     encryption_key: &[u8],
