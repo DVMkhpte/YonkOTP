@@ -4,8 +4,7 @@ use aes_gcm::{Aes256Gcm, Nonce};
 use base64::{engine::general_purpose, Engine};
 use csv::Writer;
 
-
-
+/// Crée la table si nécessaire.
 pub fn init_db(conn: &Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS otp_object (
@@ -19,27 +18,21 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Chiffre une chaîne avec AES-256-GCM et encode en Base64.
 fn encrypt_and_base64(key: &[u8], plaintext: &str) -> String {
-    // Attention : nonce fixe pour la démo uniquement !
-    let nonce = Nonce::from_slice(b"unique nonce"); // 12 octets
-    let cipher = Aes256Gcm::new_from_slice(key).unwrap();
-    let ciphertext = cipher.encrypt(nonce, plaintext.as_bytes()).unwrap();
-    general_purpose::STANDARD.encode(ciphertext)
-}
-
-/// Décode en Base64 et déchiffre avec AES-256-GCM.
-fn decrypt_from_base64(key: &[u8], b64_ciphertext: &str) -> String {
     let nonce = Nonce::from_slice(b"unique nonce");
     let cipher = Aes256Gcm::new_from_slice(key).unwrap();
-    let ciphertext = general_purpose::STANDARD
-        .decode(b64_ciphertext)
-        .expect("Base64 invalide");
-    let decrypted_data = cipher.decrypt(nonce, ciphertext.as_ref()).unwrap();
-    String::from_utf8(decrypted_data).unwrap()
+    let ct = cipher.encrypt(nonce, plaintext.as_bytes()).unwrap();
+    general_purpose::STANDARD.encode(ct)
 }
 
-/// Insère un enregistrement dans la table `otp_object`.
+fn decrypt_from_base64(key: &[u8], b64: &str) -> String {
+    let nonce = Nonce::from_slice(b"unique nonce");
+    let cipher = Aes256Gcm::new_from_slice(key).unwrap();
+    let ct = general_purpose::STANDARD.decode(b64).unwrap();
+    let pt = cipher.decrypt(nonce, ct.as_ref()).unwrap();
+    String::from_utf8(pt).unwrap()
+}
+
 pub fn insert_otp_object(
     conn: &Connection,
     service: &str,
@@ -47,114 +40,93 @@ pub fn insert_otp_object(
     secret_key: &str,
     encryption_key: &[u8],
 ) -> Result<usize> {
-    let enc_service = encrypt_and_base64(encryption_key, service);
-    let enc_u_m = encrypt_and_base64(encryption_key, u_m);
-    let enc_secret_key = encrypt_and_base64(encryption_key, secret_key);
-
+    let s = encrypt_and_base64(encryption_key, service);
+    let u = encrypt_and_base64(encryption_key, u_m);
+    let k = encrypt_and_base64(encryption_key, secret_key);
     conn.execute(
         "INSERT INTO otp_object (service, u_m, secret_key) VALUES (?1, ?2, ?3)",
-        params![enc_service, enc_u_m, enc_secret_key],
+        params![s, u, k],
     )
 }
 
-/// Récupère tous les enregistrements et renvoie un vecteur de tuples (id, service, u_m).
+pub fn update_otp_object(
+    conn: &Connection,
+    id: i64,
+    new_service: &str,
+    new_u_m: &str,
+    encryption_key: &[u8],
+) -> Result<usize> {
+    let s = encrypt_and_base64(encryption_key, new_service);
+    let u = encrypt_and_base64(encryption_key, new_u_m);
+    conn.execute(
+        "UPDATE otp_object SET service = ?1, u_m = ?2 WHERE id = ?3",
+        params![s, u, id],
+    )
+}
+
+pub fn delete_otp_object(conn: &Connection, id: i64) -> Result<usize> {
+    conn.execute("DELETE FROM otp_object WHERE id = ?1", params![id])
+}
+
 pub fn select_data(
     conn: &Connection,
     encryption_key: &[u8],
 ) -> Result<Vec<(i64, String, String)>> {
     let mut stmt = conn.prepare("SELECT id, service, u_m FROM otp_object")?;
-    let rows = stmt.query_map([], |row| {
+    let mut rows = stmt.query_map([], |row| {
         let id: i64 = row.get(0)?;
-        let enc_service: String = row.get(1)?;
-        let enc_u_m: String = row.get(2)?;
-        
-        let service = decrypt_from_base64(encryption_key, &enc_service);
-        let u_m = decrypt_from_base64(encryption_key, &enc_u_m);
-        
-        Ok((id, service, u_m))
+        let s: String = row.get(1)?;
+        let u: String = row.get(2)?;
+        Ok((
+            id,
+            decrypt_from_base64(encryption_key, &s),
+            decrypt_from_base64(encryption_key, &u),
+        ))
     })?;
 
-    let mut results = Vec::new();
-    for row in rows {
-        results.push(row?);
+    let mut out = Vec::new();
+    while let Some(row_res) = rows.next() {
+        out.push(row_res?);
     }
-    Ok(results)
+    Ok(out)
 }
 
-
-//fonction de delete
-
-pub fn delete_otp_object(conn: &Connection, id: i64) -> rusqlite::Result<usize> {
-    conn.execute(
-        "DELETE FROM otp_object WHERE id = ?1",
-        rusqlite::params![id],
-    )
-}
 pub fn select_data_secret(
     conn: &Connection,
     encryption_key: &[u8],
     id_to_search: i64,
 ) -> Result<String> {
-    let mut stmt = conn.prepare("SELECT secret_key FROM otp_object WHERE id = ?1")?;
-    
-    let secret_key = stmt.query_row([id_to_search], |row| {
-        let enc_secret_key: String = row.get(0)?;
-        Ok(decrypt_from_base64(encryption_key, &enc_secret_key))
-    }).unwrap_or_else(|_| String::new()); 
-
-    Ok(secret_key)
+    let enc: String = conn
+        .prepare("SELECT secret_key FROM otp_object WHERE id = ?1")?
+        .query_row([id_to_search], |r| r.get(0))?;
+    Ok(decrypt_from_base64(encryption_key, &enc))
 }
-/// Récupère les enregistrements dont le champ déchiffré u_m correspond au filtre donné.
-pub fn select_data_cond(
+
+pub fn export_to_csv(
     conn: &Connection,
-    u_m_filter: &str,
-    encryption_key: &[u8],
-) -> Result<Vec<(i64, String, String)>> {
-    let mut stmt = conn.prepare("SELECT id, service, u_m FROM otp_object")?;
-    let rows = stmt.query_map([], |row| {
-        let id: i64 = row.get(0)?;
-        let enc_service: String = row.get(1)?;
-        let enc_u_m: String = row.get(2)?;
-        let service = decrypt_from_base64(encryption_key, &enc_service);
-        let u_m = decrypt_from_base64(encryption_key, &enc_u_m);
-        Ok((id, service, u_m))
-    })?;
-
-    let mut results = Vec::new();
-    for row in rows {
-        let (id, service, u_m) = row?;
-        if u_m == u_m_filter {
-            results.push((id, service, u_m));
-        }
-    }
-    Ok(results)
-}
-
-pub fn export_to_csv(conn: &Connection, key: &[u8], file_path: &str) -> Result<(), Box<dyn std::error::Error>>{
+    key: &[u8],
+    file_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut wtr = Writer::from_path(file_path)?;
-
-    // En-têtes du CSV
     wtr.write_record(&["id", "service", "username/mail", "secret_key"])?;
-
     let mut stmt = conn.prepare("SELECT id, service, u_m, secret_key FROM otp_object")?;
-    let rows = stmt.query_map([], |row| {
+    let mut rows = stmt.query_map([], |row| {
         let id: i64 = row.get(0)?;
-        let enc_service: String = row.get(1)?;
-        let enc_u_m: String = row.get(2)?;
-        let enc_key: String = row.get(3)?;
-
-        let service = decrypt_from_base64(key, &enc_service);
-        let u_m = decrypt_from_base64(key, &enc_u_m);
-        let secret = decrypt_from_base64(key, &enc_key);
-
-        Ok((id.to_string(), service, u_m, secret))
+        let s: String = row.get(1)?;
+        let u: String = row.get(2)?;
+        let k: String = row.get(3)?;
+        Ok((
+            id.to_string(),
+            decrypt_from_base64(key, &s),
+            decrypt_from_base64(key, &u),
+            decrypt_from_base64(key, &k),
+        ))
     })?;
 
-    for row in rows {
-        let (id, service, u_m, secret) = row?;
-        wtr.write_record(&[id, service, u_m, secret])?;
+    while let Some(rec) = rows.next() {
+        let (id, s, u, k) = rec?;
+        wtr.write_record(&[&id, &s, &u, &k])?;
     }
-
     wtr.flush()?;
     Ok(())
 }

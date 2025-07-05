@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-gtk = { version = "0.9.6", package = "gtk4", features = ["v4_12"] }
-glib = "0.20.9"
+gtk = { version = "0.9.7", package = "gtk4", features = ["v4_12"] }
+glib = "0.20.12"
 totp-rs = "5.1.1"
-rusqlite = "0.34.0"
+rusqlite = "0.36.0"
 aes-gcm = "0.10"
 base64 = "0.22.1"
 open = "5.0"
